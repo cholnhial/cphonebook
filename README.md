@@ -5,8 +5,18 @@ database form.
 
 
 ## Class interface
-The class must be abstract as it can be. the user is to be
+The class must be abstract as it can be. The user is to be
 presented with a easy to use interface.
 
-# API
+### Phonebook storage
+The storage of the files shall be in sqlite file.
+
+# phonebook per column data
+ * First name
+ * Last name
+ * Address
+ * Telephone/Mobile
+ * Email Address
+
+
 
