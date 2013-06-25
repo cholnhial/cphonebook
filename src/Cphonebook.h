@@ -4,12 +4,37 @@
 #include <sstream>
 #include <iostream>
 #include <sqlite3.h>
+#include <unistd.h>
 #include "CphonebookException"
 
 using std::string;
 using std::cout;
 using std::endl;
 using std::stringstream;
+
+typedef struct
+{
+unsigned int pages;
+unsigned int contacts;
+} book_info_t;
+
+typedef struct
+{
+int id;
+string fname,
+string lname,
+string addr,
+string email
+} contact_t;
+
+/***
+ *  Helper functions
+ * 
+ * */
+
+static int callback_get_book_info(void * bookinfo, int argc, char **argv, char **azColName);
+static int calback_get_contact_info(void* contact, int argc, char** argv, char** azColName);
+
 class Cphonebook
 {
 private:
@@ -121,7 +146,6 @@ public:
 	 * */
 	void close(); throw(CphonebookException);
 	 							
-
 };
 
 #endif
