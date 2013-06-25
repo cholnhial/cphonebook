@@ -85,13 +85,13 @@ void Cphonebook::add_contact(unsigned int page,
 {
 	if(page < 1)
 	{
-		except.set_msg("Page number can't be zero.");
+		except.set_msg("Page number can't be zero");
 		throw(except);
 	}
 
 	if(!dbase_opened)
 	{
-		except.set_msg("Database was not opened.");
+		except.set_msg("Database was not opened");
 		throw(except);
 	}
 	
@@ -117,6 +117,7 @@ void Cphonebook::add_contact(unsigned int page,
 	if(rc != SQLITE_OK)
 	{
 		e_msg = "SQL error: " + err_msg;	
+		sqlite3_free(err_msg);
 		except.set_msg(e_msg);
 		throw(except);
 	}
@@ -133,7 +134,7 @@ void Cphonebook::append_page()
 
 	if(!dbase_opened)
 	{
-    	except.set_msg("Database was not opened.");
+    	except.set_msg("Database was not opened");
 		throw(except);
 	}
 
@@ -158,14 +159,14 @@ void Cphonebook::append_page()
 	 * Now add the new page 
 	 **/
 
-	sql_query = "CREATE TABLE " + page +
+	sql_query = "CREATE TABLE " + pagestr +
 				" (FNAME varchar(255),"
 		        " LNAME varchar(255),"
 				" ADDR varchar(255),"
 				" PHONE varchar(64),"
 				" EMAIL varchar(255));";
 
-	rc = sqlite3_exc(db, sql_query.c_str(), NULL, NULL, &err_msg);
+	rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
 	if(rc != SQLITE_OK)
 	{
 		e_msg = "SQL error: " + err_msg;
@@ -177,3 +178,63 @@ void Cphonebook::append_page()
 
 }
 
+void Cphonebook::create(const string& db_file, unsigned int npage);
+{
+	string pagestr, sql_query, e_msg;
+	char* err_msg;
+	int rc;
+
+	if(access(db_file.c_str(), F_OK))
+	{
+		except.set_msg("A phonebook exists under the same name");
+		throw(except);
+	}
+	
+	if(npage < 1)
+	{
+		except.set_msg("Can't create zero pages");
+		throw(except);
+	}
+
+	if(dbase_opened)
+	{
+		except.set_msg("A book is already opened. Close it");
+		throw(except);
+	}
+   
+    /***
+	 * Create the book(database)
+	 * 
+	 * */
+
+	rc = sqlite3_open(db_file.c_str(), &db):
+	if(rc)
+	{
+		e_msg = "Can't create database: " + sqlite3_errmsg(db);
+		except.set_msg(e_msg);
+		throw(except);
+	}
+
+	for(int i = 1; i <= npages; i++)
+	{
+		stringstream(pagestr) << i;
+
+		//build query
+		sql_query = "CREATE TABLE " + pagestr +
+				" (FNAME varchar(255),"
+		        " LNAME varchar(255),"
+				" ADDR varchar(255),"
+				" PHONE varchar(64),"
+				" EMAIL varchar(255));";
+		
+		rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
+		if(rc != SQLITE_OK)
+		{
+			e_msg = "SQL error: " + err_msg;
+			except.set_msg(e_msg);
+			sqlite3_free(err_msg);
+			throw(except);
+		}
+
+	}
+}

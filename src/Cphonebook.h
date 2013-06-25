@@ -80,7 +80,7 @@ public:
 	 *  Throws an exception if there was an error creating
 	 *  the database. 
 	 *  */
-	void create(const string& db, unsigned int npages) throw(CphonebookException);
+	void create(const string& db_file, unsigned int npages) throw(CphonebookException);
 	
 	/***
 	 * Gets a contact in the book(database)
