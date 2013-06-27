@@ -4,14 +4,17 @@
 #include <exception>
 #include <string>
 
+using std::exception;
+using std::string;
 
 class CphonebookException : public exception
 {
 private:
-	std::string string msg;
+	 string msg;
 public:
-	CphonebookException(const char* m = "Unknown");
-
+   	CphonebookException() { msg = "Unknown"; }
+	CphonebookException(const char* m);
+	virtual ~CphonebookException() throw() { } 
 	/**
 	 *  Returns the error message
 	 *  */

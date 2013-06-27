@@ -5,26 +5,30 @@
 #include <iostream>
 #include <sqlite3.h>
 #include <unistd.h>
-#include "CphonebookException"
+#include <cstdlib>
+#include <mutex>
+#include "CphonebookException.h"
 
 using std::string;
 using std::cout;
 using std::endl;
 using std::stringstream;
+using std::mutex;
 
 typedef struct
 {
-unsigned int pages;
-unsigned int contacts;
+	unsigned int pages;
+	unsigned int contacts;
 } book_info_t;
 
 typedef struct
 {
-int id;
-string fname,
-string lname,
-string addr,
-string email
+	unsigned int id;
+	string fname;
+	string lname;
+	string addr;
+	string phone;
+	string email;
 } contact_t;
 
 /***
@@ -33,7 +37,14 @@ string email
  * */
 
 static int callback_get_book_info(void * bookinfo, int argc, char **argv, char **azColName);
-static int calback_get_contact_info(void* contact, int argc, char** argv, char** azColName);
+static int callback_get_contact_info(void* contact, int argc, char** argv, char** azColName);
+
+/***
+ *  Global mutex used for syncronization
+ *  With the callback functions
+ *  */
+static mutex callback_busy;
+
 
 class Cphonebook
 {
@@ -91,7 +102,7 @@ public:
 	 * */
 	void get_contact_at(contact_t& dst,
 						unsigned int page,
-						unsigned int id); throw(CphonebookException);
+						unsigned int id) throw(CphonebookException);
 	
 	/***
 	 * Sets a contact to new information
@@ -100,7 +111,7 @@ public:
 	 * */
 	void set_contact_at(const contact_t& src,
 						unsigned int page,
-						usigned int id) throw(CphonebookException);
+						unsigned int id) throw(CphonebookException);
 	
 	/***
 	 * Removes a contact given page and id.
@@ -117,14 +128,14 @@ public:
 	 * if the page does not exist 
 	 * or if the dbase was not opened.
 	 * */
-	void delete_page(unsigned int page); throw(CphonebookException);
+	void delete_page(unsigned int page) throw(CphonebookException);
 
 	/***
 	 * Returns the number of pages(tables)
 	 * in the book(database). Throws an 
 	 * exception if the dbase was not opened.
 	 * */
-	int get_n_page(); throw(CphonebookException);
+	int get_n_page() throw(CphonebookException);
 
 	/***
 	 * Returns th number of contacts
@@ -132,19 +143,19 @@ public:
 	 * Throws an exception if the page does not
 	 * exist or dbase was not opened.
 	 * */
-	int get_n_contacts_at(unsigned int page); throw(CphonebookException);
+	int get_n_contacts_at(unsigned int page) throw(CphonebookException);
 
 	/***
 	 * Returns the number of contacts in the whole
 	 * book(datavase). Throws an exception if
 	 *  the dbase was not opened.
 	 *  */
-	int get_n_contacts();
+	int get_n_contacts() throw(CphonebookException);
 
 	/***
 	 * Closes the database(the actual sqlite handle)
 	 * */
-	void close(); throw(CphonebookException);
+	void close() throw(CphonebookException);
 	 							
 };
 

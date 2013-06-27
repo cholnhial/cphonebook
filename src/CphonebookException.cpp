@@ -1,16 +1,16 @@
 #include "CphonebookException.h"
 
-CphonebookException::CphonebookException(const char* m = "Unknown");
+CphonebookException::CphonebookException(const char* m)
 {
 	msg = m;
 }
 
-const char* CphonebookException::what()
+const char* CphonebookException::what() const throw()
 {
 	return msg.c_str();
 }
 
-void CphonebookException::set_msg(const stirng& m)
+void CphonebookException::set_msg(const string& m)
 {
 	msg = m;
 }
