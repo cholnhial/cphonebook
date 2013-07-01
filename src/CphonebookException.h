@@ -10,10 +10,10 @@ using std::string;
 class CphonebookException : public exception
 {
 private:
-	 string msg;
+	 string message_;
 public:
-   	CphonebookException() { msg = "Unknown"; }
-	CphonebookException(const char* m);
+   	CphonebookException() { message_ = "Unknown"; }
+	CphonebookException(const char* message);
 	virtual ~CphonebookException() throw() { } 
 	/**
 	 *  Returns the error message
@@ -23,7 +23,7 @@ public:
 	/** 
 	 * Sets the error message.
 	 * */
-	virtual void set_msg(const string& m);
+	virtual void setMessage(const string& message);
 };
 
 #endif

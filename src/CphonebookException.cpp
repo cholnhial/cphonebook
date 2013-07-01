@@ -1,18 +1,18 @@
 #include "CphonebookException.h"
 
-CphonebookException::CphonebookException(const char* m)
+CphonebookException::CphonebookException(const char* message)
 {
-	msg = m;
+	message_ = message;
 }
 
 const char* CphonebookException::what() const throw()
 {
-	return msg.c_str();
+	return message_.c_str();
 }
 
-void CphonebookException::set_msg(const string& m)
+void CphonebookException::setMessage(const string& message)
 {
-	msg = m;
+	message_ = message;
 }
 
 

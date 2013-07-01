@@ -2,411 +2,497 @@
 
 Cphonebook::Cphonebook()
 {
-	dbfile = "";
-	dbase_opened = false;
+	databaseFile_ = "";
+	isDatabaseOpened_ = false;
 }
 
 Cphonebook::~Cphonebook()
 {
-	if(dbase_opened)
-	{
-		sqlite3_close(db);
+	if (isDatabaseOpened_) {
+		    sqlite3_close(database_);
 	}
 }
 
-void Cphonebook::open(const string& dbase) throw(CphonebookException)
+void 
+Cphonebook::waitForDatabase()
 {
-	char* err_msg = 0;
-	int rc;
-	string e_msg;
-	string sql_query;
-	bool dbexists = false;
+    sCallbackBusy.lock();
+    sCallbackBusy.unlock();
+}
 
-	/**
-	 * Check if db file
-	 * already exists.
-	 * */
-	if(access(dbase.c_str(), F_OK) == 0)
-	{
-		dbexists = true;	
+
+void 
+Cphonebook::executeSqlQuery(const string& sqlQuery,
+                            SQLITE3_CALLBACK callback,
+                            void* callbackData) throw(CphonebookException)
+{
+    char* errorMessage = 0;
+
+    int returnCode = sqlite3_exec(database_,
+                                  sqlQuery.c_str(),
+                                  callback,
+                                  callbackData,
+                                  &errorMessage);
+    if (returnCode != SQLITE_OK) {
+        string exceptionMessage = "SQL error: " + string(errorMessage);
+        sqlite3_free(errorMessage);
+        exception_.setMessage(exceptionMessage);
+        throw(exception_);
+    }
+}
+
+
+void 
+Cphonebook::createDatabase(const string& databaseFile) throw(CphonebookException)
+{
+
+    int returnCode = sqlite3_open(databaseFile.c_str(), &database_);
+
+    if (returnCode) { 
+		
+        string exceptionMessage = "can't open database: " + 
+        string(sqlite3_errmsg(database_));
+        
+	    exception_.setMessage(exceptionMessage);
+	    throw(exception_);
 	}
 
+}
+
+void 
+Cphonebook::open(const string& databaseFile) throw(CphonebookException)
+{  
+
 	/**
+	 * Check if database file
+	 * already exists.
+	 * */
+	bool databaseExists = false;
+	if (access(databaseFile.c_str(), F_OK) == 0) {
+        databaseExists = true;	
+	}
+
+	/***
 	 *  Open the database, it will be created
 	 *  if it doesn't exist
 	 *  */
-	rc = sqlite3_open(dbase.c_str(), &db);
+     createDatabase(databaseFile);
 
-	if(rc)
-	{ 
-		
-		e_msg = "Can't open database: " + string(sqlite3_errmsg(db));
-		except.set_msg(e_msg);
-		throw(except);
-	}
-	
-	/**
+    /***
 	 * Add phonebook information
 	 * table if this is the first
 	 * time creating this phonebook
 	 **/
 
-	 //build query
-	 if(!dbexists)
-	 {
-	 	sql_query = "CREATE TABLE book_info "
+	 if (!databaseExists) {
+        // build query
+	    string sqlQuery = "CREATE TABLE bookinfo "
 	             "(Pages int, "
 				 " Contacts int); "
-				 "INSERT INTO book_info (Pages, Contacts) "
+				 "INSERT INTO bookinfo (Pages, Contacts) "
 				 "VALUES(0, 0);";
 	
 		// execute the SQL query
-		rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-	
-		if(rc != SQLITE_OK)
-		{
-			e_msg = "SQL error: " + string(err_msg);
-			except.set_msg(e_msg);
-			throw(except);
-		}
+        executeSqlQuery(sqlQuery);
 
 	}
 
+    /** 
+     * Get bookinfo for quick aceess
+     * */
+    string sqlQuery = "SELECT * FROM bookinfo;";
+    executeSqlQuery(sqlQuery, callbackGetBookInfo, (void*) &bookInfo_);
+    waitForDatabase();
 
 	/** 
 	 * No issues so far
 	 * */
-	dbfile = dbase;
-	dbase_opened = true;
+	databaseFile_ = databaseFile;
+	isDatabaseOpened_ = true;
 }
 
-void Cphonebook::add_contact(unsigned int page,
-	                  const string& fname,
-					  const string& lname,
-					  const string& addr,
-					  const string& phone,
-					  const string& email) throw(CphonebookException)
+
+void 
+Cphonebook::updateBookInfo()
 {
-	if(page < 1)
-	{
-		except.set_msg("Page number can't be zero");
-		throw(except);
+    // building query
+    string sqlQuery = "UPDATE bookinfo "
+               "SET Pages=" + std::to_string(bookInfo_.pages) +
+               ",Contacts=" + std::to_string(bookInfo_.contacts) +
+               ";";
+
+     // execute sql query
+    executeSqlQuery(sqlQuery);
+}
+
+
+void
+Cphonebook::addContact(const unsigned int pageNo,
+                const Contact& srcContact) throw(CphonebookException) 
+{
+	// These if's are looking for common errors
+	if (pageNo < 1){
+        exception_.setMessage("Page number can't be zero");
+        throw(exception_);
 	}
 
-	if(!dbase_opened)
-	{
-		except.set_msg("Can't add contact. Database was not opened");
-		throw(except);
+	if (!isDatabaseOpened_){
+		exception_.setMessage("Database was not opened");
+		throw(exception_);
 	}
 	
-	/***
-	 * Add contact to page(table)
-	 * */
-	string sql_query;
-	string table;
-	string e_msg;
-	char* err_msg = 0;
-	int rc;
+	/*******************************
+	 * Add contact to page(table)  *
+	 *                             *
+	 *******************************/
+
+	char* errorMessage = 0;
 
 	// convert table name from int to string
-	table = std::to_string(page);
+	string table = std::to_string(pageNo);
    
 	// build query
-	sql_query = "INSERT INTO '" + table + "' "
-				+ "VALUES " + "(\"" + fname + "\",\"" + lname + "\",\"" +  addr + "\",\"" + 
-				phone + "\",\"" + email + "\");";
+	string sqlQuery = "INSERT INTO '" + table + "' "
+				+ "VALUES " + "(\"" + srcContact.firstName + "\",\"" +
+                srcContact.lastName + "\",\"" +  srcContact.address + "\",\"" + 
+				srcContact.phone + "\",\"" + srcContact.email + "\");";
     
-	cout << "QUERY: " << sql_query << endl;
 	// execute the SQL query
-	rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-	
-	if(rc != SQLITE_OK)
-	{
-		e_msg = "SQL error: " + string(err_msg);
-		sqlite3_free(err_msg);
-		except.set_msg(e_msg);
-		throw(except);
-	}
-
-
+    executeSqlQuery(sqlQuery);
+    
+    /*
+     *  update bookinfo table
+     *  */
+    /*BookInfo bookInfo;
+    sqlQuery = "SELECT * FROM bookinfo;";
+    executeSqlQuery(sqlQuery, callbackGetBookInfo, (void*)  &bookInfo);
+    waitForDatabase();*/
+    bookInfo_.contacts++; // incrementing 
+   // sqlQuery = "UPDATE bookinfo "
+     //          "SET Contacts=" + std::to_string(bookInfo.contacts) +
+       //        " WHERE Pages=" + std::to_string(bookInfo.pages) + ";";
+    updateBookInfo();
+    //executeSqlQuery(sqlQuery);
 }
 
-void Cphonebook::append_page() throw(CphonebookException)
+void 
+Cphonebook::appendPage() throw(CphonebookException)
 {
-	string e_msg, sql_query, pagestr;
-	char* err_msg = 0;
-	book_info_t binfo;
-	int page, rc;
-
-	if(!dbase_opened)
-	{
-    	except.set_msg("Can't append page. Database was not opened");
-		throw(except);
+    // Is the database opened?
+	if (!isDatabaseOpened_){
+    	exception_.setMessage("Database was not opened");
+		throw(exception_);
 	}
-
-	sql_query = "SELECT * FROM book_info;";
-
-	rc = sqlite3_exec(db, sql_query.c_str(), callback_get_book_info, &binfo, &err_msg);
-	if(rc != SQLITE_OK)
-	{
-	e_msg = "SQL error: " + string(err_msg);
-	sqlite3_free(err_msg);
-	except.set_msg(e_msg);
-	throw(except);
-	}
-	
+    
 	/***
 	 * Wait for the mutex to be unlocked
+	 * by the callback function.
 	 */
-	 callback_busy.lock();
-	 callback_busy.unlock();
+    waitForDatabase();
 
 	/***
 	 *  We got the information 
 	 *  by this point 
 	 **/
-	page = binfo.pages;
-    page++;
-	stringstream ss;
-	ss << page;
-	ss >> pagestr;
+
+	 /***
+	 * Get numbers of pages.
+	 * and increment it
+	 */
+	 bookInfo_.pages++;
+    
+	
+	// convert int to string
+	string pageNumberString = std::to_string(bookInfo_.pages);
+
 	/** 
 	 * Now add the new page 
 	 **/
-    cout << "PAGE: " << pagestr << endl;
-	sql_query = "CREATE TABLE '" + pagestr +
-	            "'(FNAME varchar(255),"
-		        " LNAME varchar(255),"
-				" ADDR varchar(255),"
-				" PHONE varchar(64),"
-				" EMAIL varchar(255));";
-	cout << "QUERY: " << sql_query << endl;
-	rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-	if(rc != SQLITE_OK)
-	{
-		e_msg = "SQL error: " + string(err_msg);
-		except.set_msg(e_msg);
-		sqlite3_free(err_msg);
-		throw(except);
-	}
+	 
+	// build sql query
+	string sqlQuery = "CREATE TABLE '" + pageNumberString +
+	            "'(FNAME vareturnCodehar(255),"
+		        " LNAME vareturnCodehar(255),"
+				" ADDR vareturnCodehar(255),"
+				" PHONE vareturnCodehar(64),"
+				" EMAIL vareturnCodehar(255));";
+				
+    // execute sql query
+    executeSqlQuery(sqlQuery);
 
-
+    // update bookinfo
+    updateBookInfo();
 }
 
-void Cphonebook::create(const string& db_file, unsigned int npages) throw(CphonebookException)
-{
-	string pagestr, sql_query, e_msg;
-	char* err_msg;
-	int rc;
 
-	if(access(db_file.c_str(), F_OK))
-	{
-		except.set_msg("A phonebook exists under the same name");
-		throw(except);
+void 
+Cphonebook::create(const string& databaseFile,
+             const unsigned int nPages) throw(CphonebookException)
+{
+	char* errorMessage;
+
+	if (access(databaseFile_.c_str(), F_OK)){
+		exception_.setMessage("A phonebook exists under the same name");
+		throw(exception_);
 	}
 	
-	if(npages < 1)
+	if(nPages < 1)
 	{
-		except.set_msg("Can't create zero pages");
-		throw(except);
+		exception_.setMessage("Can't create zero pages");
+		throw(exception_);
 	}
 
-	if(dbase_opened)
+	if(isDatabaseOpened_)
 	{
-		except.set_msg("A book is already opened. Close it");
-		throw(except);
+		exception_.setMessage("A book is already opened. Close it");
+		throw(exception_);
 	}
    
     /***
 	 * Create the book(database)
 	 * 
 	 * */
+    createDatabase(databaseFile);
 
-	rc = sqlite3_open(db_file.c_str(), &db);
-	if(rc)
-	{
-		e_msg = "Can't create database: " + string(sqlite3_errmsg(db));
-		except.set_msg(e_msg);
-		throw(except);
-	}
 
 	 //build query
-	 sql_query = "CREATE TABLE book_info "
+	 string sqlQuery = "CREATE TABLE bookinfo "
 	             "(Pages int, "
 				 " Contacts int); "
-				 "INSERT INTO book_info (Pages, Contacts) "
+				 "INSERT INTO bookinfo (Pages, Contacts) "
 				 "VALUES(0, 0);";
 	
 	// execute the SQL query
-	rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-	
-	if(rc != SQLITE_OK)
-	{
-		e_msg = "SQL error: " + string(err_msg);
-		except.set_msg(e_msg);
-		throw(except);
-	}
-	
+    executeSqlQuery(sqlQuery);	
 
-	for(int i = 1; i <= npages; i++)
-	{
-		stringstream(pagestr) << i;
+	for (int i = 1; i <= nPages; i++) {
+	    string pageNumberString = std::to_string(i);
 
 		//build query
-		sql_query = "CREATE TABLE " + pagestr +
-				" (FNAME varchar(255),"
-		        " LNAME varchar(255),"
-				" ADDR varchar(255),"
-				" PHONE varchar(64),"
-				" EMAIL varchar(255));";
-		
-		rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-		if(rc != SQLITE_OK)
-		{
-			e_msg = "SQL error: " + string(err_msg);
-			except.set_msg(e_msg);
-			sqlite3_free(err_msg);
-			throw(except);
-		}
-
+		sqlQuery = "CREATE TABLE '" + pageNumberString +
+				"' (FNAME vareturnCodehar(255),"
+		        " LNAME vareturnCodehar(255),"
+				" ADDR vareturnCodehar(255),"
+				" PHONE vareturnCodehar(64),"
+				" EMAIL vareturnCodehar(255));";
+        //execute query
+        executeSqlQuery(sqlQuery);    
 	}
+    
+    
+    bookInfo_.contacts = 0;
+    bookInfo_.pages = 0;
+
+    databaseFile_ = databaseFile;
+    isDatabaseOpened_ = true;
 }
 
-void Cphonebook::get_contact_at(contact_t& dst,
-								unsigned int page,
-								unsigned int id) throw(CphonebookException)
+void 
+Cphonebook::getContactAt(Contact& dstContact,
+                       const unsigned int pageNo,
+                       const unsigned int idNo) throw(CphonebookException)
 {
-	string e_msg, sql_query, idstr, pagestr;
-	char* err_msg;
-	int rc;
-
-	if(!dbase_opened)
-	{
-		except.set_msg("Can't get contact, database not opened");
-		throw(except);
+	if (!isDatabaseOpened_) {
+		exception_.setMessage("Can't get contact, database not opened");
+		throw(exception_);
 	}
 
-	if(page < 1)
-	{
-		except.set_msg("Page number can't be zero");
-		throw(except);
+	if (pageNo < 1) {
+		exception_.setMessage("Page number can't be zero");
+		throw(exception_);
 	}
 
-	if(id < 1)
-	{
-   		except.set_msg("Contact id can't be zero");
-		throw(except);
+	if (idNo < 1) {
+   		exception_.setMessage("Contact id can't be zero");
+		throw(exception_);
 	}
 
 	// convert to string
-	idstr = std::to_string(id);
-	pagestr =  std::to_string(page);
+	string idNumberString = std::to_string(idNo);
+	string pageNumberString =  std::to_string(pageNo);
 
 	// build query
-	sql_query = "SELECT oid, FNAME, LNAME, ADDR, PHONE, EMAIL FROM '" + pagestr +
-		    "' WHERE oid=" +  idstr + ";";
+	string sqlQuery = "SELECT "
+                      "oid,"
+                      "FNAME,"
+                      "LNAME,"
+                      "ADDR,"
+                      "PHONE,"
+                      "EMAIL"
+                      " FROM '" + pageNumberString +
+		              "' WHERE oid=" +  idNumberString + ";";
 
 	//execute query
-	rc = sqlite3_exec(db, sql_query.c_str(), callback_get_contact_info, (void*) &dst, &err_msg);
-	if(rc != SQLITE_OK)
-	{
-		e_msg = "SQL error: " + string(err_msg);
-		sqlite3_free(err_msg);
-		except.set_msg(e_msg);
-		throw(except);
-	}
+    executeSqlQuery(sqlQuery, callbackGetContact, (void*) &dstContact);
 
 	/*** 
 	 * Wait for the callback function to finish
 	 **/
-	 callback_busy.lock();
-	 callback_busy.unlock();
+     waitForDatabase();
 }
 
-void Cphonebook::set_contact_at(const contact_t& src,
-					unsigned int page,
-					unsigned int id) throw(CphonebookException)
+
+void 
+Cphonebook::setContactAt (const Contact& srcContact,
+                          const unsigned int pageNo,
+                          const unsigned int idNo) throw(CphonebookException)
 {
-	string e_msg, sql_query, pagestr, idstr;
-	char* err_msg;
-	int rc;
+	char* errorMessage = 0;
 
-	if(page < 1)
-	{
-	except.set_msg("Page number can't be zero");
-	throw(except);
+	if (pageNo < 1) {
+	    exception_.setMessage("Page number can't be zero");
+	    throw(exception_);
 	}
 
-	if(id < 1)
-	{
-	except.set_msg("Contact id can't be zero");
-	throw(except);
+	if (idNo < 1) {
+	    exception_.setMessage("Contact id can't be zero");
+	    throw(exception_);
 	}
 
-	if(!dbase_opened)
-	{
-    except.set_msg("Can't set contact. Database was not opened");
-	throw(except);
+	if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+	    throw(exception_);
 	}
 	
 	// convert to strings
-	pagestr =  std::to_string(page);
-	idstr = std::to_string(id);
+	string pageNumberString =  std::to_string(pageNo);
+	string idNumberString = std::to_string(idNo);
 
 	// build query
-	sql_query = "UPDATE '" + pagestr + "'\n" +
-				"SET FNAME=\"" + src.fname + "\","
-				"LNAME=\"" + src.lname + "\","
-				"ADDR=\"" + src.addr + "\","
-				"PHONE=\"" + src.phone + "\","
-				"EMAIL=\"" + src.email + "\"\n"
-				"WHERE oid=" + idstr + ";";
+	string sqlQuery = "UPDATE '" + pageNumberString + "'\n" +
+				"SET FNAME=\"" + srcContact.firstName + "\","
+				"LNAME=\"" + srcContact.lastName + "\","
+				"ADDR=\"" + srcContact.address + "\","
+				"PHONE=\"" + srcContact.phone + "\","
+				"EMAIL=\"" + srcContact.email + "\"\n"
+				"WHERE oid=" + idNumberString + ";";
 	
 	//execute query
-	rc = sqlite3_exec(db, sql_query.c_str(), NULL, NULL, &err_msg);
-	if(rc != SQLITE_OK)
-	{
-		e_msg = "SQL error: " + string(err_msg);
-		sqlite3_free(err_msg);
-		except.set_msg(e_msg);
-		throw(except);
-	}
+    executeSqlQuery(sqlQuery);
 }
 
-void Cphonebook::delete_contact_at(unsigned int page,
-					   unsigned int id) throw(CphonebookException)
-{
+void 
+Cphonebook::deleteContactAt(const unsigned int pageNo,
+					        const unsigned int idNo) throw(CphonebookException)
+{   
+    if (pageNo < 1) {
+        exception_.setMessage("Page number can't be zero");
+        throw(exception_);
+    }
 
+    if (idNo < 1) {
+        exception_.setMessage("Contact id number can't be zero");
+        throw(exception_);
+    } 
+    
+    if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }  
+
+    // convert to strings
+    string pageNumberString = std::to_string(pageNo);
+    string idNumberString = std::to_string(idNo);
+
+    string sqlQuery = "DELETE FROM '" + pageNumberString + "' " +
+                      "WHERE oid=" + idNumberString + ";";
+    
+    executeSqlQuery(sqlQuery);
+
+    /** Update bookinfo table **/
+    // decrement the number of contacts
+    bookInfo_.contacts--;
+    updateBookInfo();
 
 }
 
-void Cphonebook::delete_page(unsigned int page) throw(CphonebookException)
-{
+void 
+Cphonebook::deletePage(const unsigned int pageNo) throw(CphonebookException)
+{   
+
+    if (pageNo < 1) {
+        exception_.setMessage("Page number can't be zero");
+        throw(exception_);
+    }
+
+    if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }
+
+    /*********************************
+     *  Update the bookinfo table    *
+     *********************************/
+    bookInfo_.pages--;
+    /*** 
+     * remove the count of the number of contacts
+     * that belonged to this page.
+     */
+    bookInfo_.contacts -= getNumberOfContactsAt(pageNo);
+    updateBookInfo();
+
+ // build the query to remove the page(table)
+    string sqlQuery = "DROP TABLE '" + std::to_string(pageNo) + "';";
+
+    // run the query
+    executeSqlQuery(sqlQuery);
 
 }
 
-int Cphonebook::get_n_page() throw(CphonebookException)
+int 
+Cphonebook::getNumberOfPages() throw(CphonebookException)
 {
+    if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }
+
+    return bookInfo_.pages;
+}
+
+int 
+Cphonebook::getNumberOfContactsAt(const unsigned int pageNo)
+throw(CphonebookException)
+{
+    if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }
+    
+    if (pageNo < 1) {
+        exception_.setMessage("Page number can't be zero");
+        throw(exception_);
+    }
+    string sqlQuery = "SELECT COUNT() FROM '" +
+                      std::to_string(pageNo)  + "';";
+    
+    // execute query
+    int nContacts;
+    executeSqlQuery(sqlQuery, callbackGenericGetNumber, (void*) &nContacts);
+    waitForDatabase();
+
+    return nContacts;
 
 }
 
-int Cphonebook::get_n_contacts_at(unsigned int page) throw(CphonebookException)
+int 
+Cphonebook::getNumberOfContacts() throw (CphonebookException)
 {
+ if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }
 
-
-}
-
-int Cphonebook::get_n_contacts() throw (CphonebookException)
-{
+    return bookInfo_.contacts;
 
 }
 
 void Cphonebook::close() throw (CphonebookException)
 {
 
-	if(dbase_opened)
+	if(isDatabaseOpened_)
 	{
-	sqlite3_close(db);
+	sqlite3_close(database_);
 	}
 
 }
@@ -416,74 +502,99 @@ void Cphonebook::close() throw (CphonebookException)
  * Implementation of helper functions  *
  * *************************************/
 
-int callback_get_book_info(void * bookinfo, int argc, char **argv, char **azColName)
+int callbackGetBookInfo(void* bookinfo,
+                        int argc,
+                        char **argv,
+                        char **azColName)
 {
 	//lock mutex first
-	callback_busy.lock();
+	sCallbackBusy.lock();
 
-	book_info_t* binfo = (book_info_t*) bookinfo;
-	string colname;
+	BookInfo* bookInfo = (BookInfo*) bookinfo;
 
-	for(int i = 0; i < argc; i++)
-	{
-		colname = azColName[i];
-		if(colname == "Pages")
-		{
-			binfo->pages = atoi(argv[i]);
+	string ColumnName;
+    
+
+	/***
+	 * This for loop gets the columns
+	 * we are interested in only.
+	 *  They are 'Pages' and 'Contacts'
+	 *  */
+	for(int i = 0; i < argc; i++) {
+		string ColumnName = azColName[i];
+
+		if (ColumnName == "Pages") {
+			bookInfo->pages = atoi(argv[i]);
 		}
 
-		if(colname == "contacts")
-		{
-			binfo->contacts = atoi(argv[i]);	
+		if (ColumnName == "Contacts") {
+            
+			bookInfo->contacts = atoi(argv[i]);	
 		}
 	}
 	
-	callback_busy.unlock();
+	// we are done, unlock the mutex
+	sCallbackBusy.unlock();
+
 	return 0;
 }
 
-int callback_get_contact_info(void* contact, int argc, char** argv, char** azColName)
+int callbackGetContact(void* dstContact,
+                       int argc,
+                       char** argv,
+                       char** azColName)
 {
 	// lock mutex first
-	callback_busy.lock();
+	sCallbackBusy.lock();
 
-	string colname;
-	contact_t* cntct = (contact_t*) contact;
-
-	for(int i = 0; i < argc; i++)
-	{
-		colname = azColName[i];
-		if(colname == "rowid")
-		{
-			cntct->id = atoi(argv[i]);
-		}
-		if(colname == "FNAME")
-		{
-			cntct->fname = argv[i];		
+	Contact* contact = (Contact*) dstContact;
+	 
+	for (int i = 0; i < argc; i++) {
+		string ColumnName = azColName[i];
+		if (ColumnName == "rowid") {
+			contact->id = atoi(argv[i]);
 		}
 
-		if(colname == "LNAME")
-		{
-			cntct->lname = argv[i];
+		if (ColumnName == "FNAME") {
+			contact->firstName = argv[i];		
 		}
 
-		if(colname == "ADDR")
-		{
-			cntct->addr = argv[i];
+		if (ColumnName == "LNAME") {
+			contact->lastName = argv[i];
 		}
 
-		if(colname == "PHONE")
-		{
-			cntct->phone = argv[i];
+		if (ColumnName == "ADDR") {
+			contact->address = argv[i];
 		}
 
-		if(colname == "EMAIL")
-		{
-			cntct->email = argv[i];
+		if (ColumnName == "PHONE") {
+			contact->phone = argv[i];
+		}
+
+		if (ColumnName == "EMAIL") {
+			contact->email = argv[i];
 		}
 	}
 	
-	callback_busy.unlock();
+	sCallbackBusy.unlock();
 
 	return 0;
 }
+
+static int callbackGenericGetNumber(void* dst, int argc,
+                                    char** argv,
+                                    char** azColName)
+{
+    int* number = (int*) dst;
+
+    for (int i = 0; i < argc; i++) {
+        string columnName = azColName[i];
+
+        if (columnName == "COUNT()") {
+            *number = atoi(argv[i]);
+        }
+    }
+
+    return 0;
+}
+
