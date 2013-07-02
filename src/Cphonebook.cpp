@@ -131,12 +131,12 @@ Cphonebook::addContact(const unsigned int pageNo,
                 const Contact& srcContact) throw(CphonebookException) 
 {
     // These if's are looking for common errors
-    if (pageNo < 1){
+    if (pageNo < 1) {
         exception_.setMessage("Page number can't be zero");
         throw(exception_);
     }
 
-    if (!isDatabaseOpened_){
+    if (!isDatabaseOpened_) {
         exception_.setMessage("Database was not opened");
         throw(exception_);
     }
@@ -172,7 +172,7 @@ void
 Cphonebook::appendPage() throw(CphonebookException)
 {
     // Is the database opened?
-    if (!isDatabaseOpened_){
+    if (!isDatabaseOpened_) {
         exception_.setMessage("Database was not opened");
         throw(exception_);
     }
@@ -224,19 +224,17 @@ Cphonebook::create(const string& databaseFile,
 {
     char* errorMessage;
 
-    if (access(databaseFile_.c_str(), F_OK)){
+    if (access(databaseFile_.c_str(), F_OK)) {
         exception_.setMessage("A phonebook exists under the same name");
         throw(exception_);
     }
     
-    if(nPages < 1)
-    {
+    if (nPages < 1) {
         exception_.setMessage("Can't create zero pages");
         throw(exception_);
     }
 
-    if(isDatabaseOpened_)
-    {
+    if (isDatabaseOpened_) {
         exception_.setMessage("A book is already opened. Close it");
         throw(exception_);
     }
@@ -490,8 +488,7 @@ Cphonebook::getNumberOfContacts() throw (CphonebookException)
 void Cphonebook::close() throw (CphonebookException)
 {
 
-    if(isDatabaseOpened_)
-    {
+    if (isDatabaseOpened_) {
     sqlite3_close(database_);
     }
 
