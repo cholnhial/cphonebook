@@ -325,6 +325,32 @@ Cphonebook::getContactAt(Contact& dstContact,
 
 
 void 
+Cphonebook::getContactsAt(ContactList& contactList,
+                      const unsigned int pageNo) throw(CphonebookException)
+{
+    if (pageNo < 1) {
+        exception_.setMessage("Page number can't be zero");
+        throw(exception_);
+    }
+
+    if (!isDatabaseOpened_) {
+        exception_.setMessage("Database was not opened");
+        throw(exception_);
+    }
+
+    for (int i = 1; i <= getNumberOfContactsAt(pageNo); i++) {
+        Contact contact;
+        getContactAt(contact, pageNo, i);
+        
+        /***
+         *  Add contact to list
+         *  */
+        contactList.push_back(contact);
+    }
+}
+
+
+void 
 Cphonebook::setContactAt (const Contact& srcContact,
                           const unsigned int pageNo,
                           const unsigned int idNo) throw(CphonebookException)

@@ -7,6 +7,7 @@
 #include <cstdlib>
 
 #include <string>
+#include <vector>
 #include <sstream>
 #include <mutex>
 
@@ -38,6 +39,7 @@ typedef struct
 
 
 typedef int (*SQLITE3_CALLBACK)(void*,int,char**,char**);
+typedef std::vector<Contact> ContactList;
 
 
 /***
@@ -205,6 +207,27 @@ public:
                        const unsigned int pageNo,
                        const unsigned int idNo) throw(CphonebookException);
     
+   /***
+    *  getContactsA()
+    *
+    *  Gets a list of contacts given the page
+    *  number.
+    *   
+    *  Paramataers: 
+    *    A ContactListi(vector) type that will hold the contacts.
+    *    Second paramater is page number.
+    *
+    *  Returns:
+    *    none
+    *
+    *  Throws:
+    *    CphonebookException if PagNo is less than one and if
+    *    the database is not opened.
+    *
+    **/
+   void getContactsAt(ContactList& contactList,
+                      const unsigned int pageNo) throw(CphonebookException); 
+
     /***
      *  setContactAt ()
      *
@@ -316,7 +339,8 @@ public:
      *    problem getting the number of contacts in the page.
      * 
      * */
-    int getNumberOfContactsAt (const unsigned int pageNo) throw(CphonebookException);
+    int getNumberOfContactsAt (const unsigned int pageNo)
+    throw(CphonebookException);
 
 
     /***
